@@ -1,0 +1,18 @@
+# Node dependencies
+frontend/node_modules/
+backend/node_modules/
+
+# Build outputs
+frontend/dist/
+backend/dist/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Environment files
+*.env
+
+# Python virtual environments
+venv/
+.env/
+__pycache__/
