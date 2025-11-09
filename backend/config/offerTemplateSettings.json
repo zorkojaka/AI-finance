@@ -1,0 +1,46 @@
+{
+  "company": {
+    "name": "Inteligent d.o.o.",
+    "tagline": "Celovite rešitve avtomatizacije in digitalizacije",
+    "address": "Tržaška cesta 99, 1000 Ljubljana",
+    "taxId": "SI12345678",
+    "registration": "8765432",
+    "email": "info@inteligent.si",
+    "phone": "+386 40 123 456",
+    "website": "www.inteligent.si",
+    "logoUrl": "https://dummyimage.com/220x60/2563eb/ffffff&text=INTELIGENT"
+  },
+  "note": "* Se obračuna po dejanski porabi.\nPonudba se smatra kot potrjena s prejetim 50% avansom.\n",
+  "preview": {
+    "stevilka": "P-2025/0012",
+    "datum": "2025-01-15",
+    "client": {
+      "ime": "Kovinarstvo Novak d.o.o.",
+      "naslov": "Podutiška cesta 15, 1000 Ljubljana",
+      "davcna": "SI12345678"
+    },
+    "items": [
+      {
+        "naziv": "Industrijski krmilnik X200",
+        "enota": "kos",
+        "kolicina": 2,
+        "cenaNaEnoto": 3450,
+        "ddv": 22
+      },
+      {
+        "naziv": "IoT senzor paket",
+        "enota": "kos",
+        "kolicina": 10,
+        "cenaNaEnoto": 180,
+        "ddv": 22
+      },
+      {
+        "naziv": "Implementacija in konfiguracija",
+        "enota": "storitev",
+        "kolicina": 1,
+        "cenaNaEnoto": 3800,
+        "ddv": 22
+      }
+    ]
+  }
+}
