@@ -1,331 +1,389 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Dialog, Transition } from '@headlessui/react';
+import { PlusCircleIcon } from '@heroicons/react/24/outline';
+import type { Client, ClientPayload, ClientType } from '../types/client';
 
-// CRM stranka tip
-export type ClientType = 'fizična' | 'podjetje';
-export type ClientStatus = 'aktivno' | 'čakanje' | 'zaprto';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/clients';
 
-export interface CRMClient {
-  id: string;
-  ime: string;
-  tip: ClientType;
-  podjetje?: string;
-  davcna?: string;
-  email: string;
-  telefon: string;
-  naslov: string;
-  status: ClientStatus;
-  opomba?: string;
-  datumVnosa: string; // ISO datum
-}
-
-const defaultClient: CRMClient = {
-  id: '',
-  ime: '',
-  tip: 'fizična',
-  podjetje: '',
-  davcna: '',
+const defaultForm: ClientPayload = {
+  name: '',
+  company: '',
+  type: 'oseba',
+  taxNumber: '',
   email: '',
-  telefon: '',
-  naslov: '',
-  status: 'aktivno',
-  opomba: '',
-  datumVnosa: '',
+  phone: '',
+  address: '',
+  status: 'aktivna',
+  createdAt: new Date().toISOString().slice(0, 10),
+  note: ''
 };
 
-const demoClients: CRMClient[] = [
-  {
-    id: '1',
-    ime: 'Janez Novak',
-    tip: 'fizična',
-    email: 'janez.novak@email.si',
-    telefon: '041 111 222',
-    naslov: 'Ulica 1, 1000 Ljubljana',
-    status: 'aktivno',
-    datumVnosa: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    ime: 'Podjetje d.o.o.',
-    tip: 'podjetje',
-    podjetje: 'Podjetje d.o.o.',
-    davcna: 'SI12345678',
-    email: 'info@podjetje.si',
-    telefon: '059 123 456',
-    naslov: 'Industrijska 23, 2000 Maribor',
-    status: 'čakanje',
-    datumVnosa: new Date().toISOString(),
-  },
-];
+const CRM = () => {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<ClientPayload>(defaultForm);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-export default function CRM() {
-  const [clients, setClients] = useState<CRMClient[]>(demoClients);
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState<CRMClient>({ ...defaultClient });
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(API_URL);
+        if (!response.ok) {
+          throw new Error('Napaka pri pridobivanju strank.');
+        }
+        const data = await response.json();
+        setClients(data.clients ?? []);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  function resetForm() {
-    setForm({ ...defaultClient, id: '', datumVnosa: new Date().toISOString() });
-    setErrors({});
-  }
+    fetchClients();
+  }, []);
 
-  function openAdd() {
+  const resetForm = () => {
+    setForm(defaultForm);
+    setFormError(null);
+  };
+
+  const handleOpenModal = () => {
     resetForm();
-    setAdding(true);
-  }
+    setModalOpen(true);
+  };
 
-  function validateEmail(email: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }
+  const handleCloseModal = () => {
+    setModalOpen(false);
+  };
 
-  function validateDavcna(davcna: string) {
-    return /^SI[0-9]{8}$/.test(davcna);
-  }
+  const handleChange = (field: keyof ClientPayload, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    const { name, value } = e.target;
-    setForm(f => ({ ...f, [name]: value }));
-  }
-
-  function validate(): boolean {
-    const err: { [key: string]: string } = {};
-    if (!form.ime.trim()) err.ime = 'Obvezno polje';
-    if (!form.tip) err.tip = 'Obvezno polje';
-    if (form.tip === 'podjetje') {
-      if (!form.podjetje || !form.podjetje.trim()) err.podjetje = 'Obvezno polje';
-      if (!form.davcna) err.davcna = 'Obvezno polje';
-      if (form.davcna && !validateDavcna(form.davcna)) err.davcna = 'Neveljaven format (npr. SI12345678)';
+  const validateForm = () => {
+    if (!form.name.trim() || !form.email.trim()) {
+      return 'Ime in e-pošta sta obvezna.';
     }
-    if (!validateEmail(form.email)) err.email = 'Neveljaven email naslov';
-    if (!form.telefon.trim()) err.telefon = 'Obvezno polje';
-    if (!form.naslov.trim()) err.naslov = 'Obvezno polje';
-    if (!form.status) err.status = 'Izberi status';
-    setErrors(err);
-    return Object.keys(err).length === 0;
-  }
+    if (form.type === 'podjetje' && !form.taxNumber.trim()) {
+      return 'Za podjetja je obvezna davčna številka.';
+    }
+    return null;
+  };
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!validate()) return;
-    setClients(clients => [
-      { ...form, id: `${Date.now()}` },
-      ...clients,
-    ]);
-    setAdding(false);
-  }
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const validationError = validateForm();
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setFormError(null);
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload.error ?? 'Napaka pri shranjevanju stranke.');
+      }
+
+      const payload = await response.json();
+      if (payload.client) {
+        setClients((prev) => [payload.client as Client, ...prev]);
+        handleCloseModal();
+      }
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const stats = useMemo(() => {
+    const total = clients.length;
+    const companies = clients.filter((client) => client.type === 'podjetje').length;
+    const individuals = clients.filter((client) => client.type === 'oseba').length;
+
+    return [
+      { label: 'Skupno strank', value: total },
+      { label: 'Podjetja', value: companies },
+      { label: 'Fizične osebe', value: individuals }
+    ];
+  }, [clients]);
 
   return (
-    <div className="max-w-5xl mx-auto py-6 bg-brand-blue min-h-screen">
-      <div className="flex justify-between items-center mb-4 px-4">
-        <h1 className="text-3xl font-extrabold tracking-tight text-white drop-shadow">CRM: Stranke</h1>
-        <button
-          onClick={openAdd}
-          className="text-brand-blue bg-white rounded-lg font-semibold px-5 py-2 shadow hover:bg-brand-grayLight flex items-center gap-2"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-            <path
-              fillRule="evenodd"
-              d="M10 5a.75.75 0 0 1 .75.75v3.5h3.5a.75.75 0 0 1 0 1.5h-3.5v3.5a.75.75 0 0 1-1.5 0v-3.5h-3.5a.75.75 0 0 1 0-1.5h3.5v-3.5A.75.75 0 0 1 10 5Z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Dodaj stranko
-        </button>
-      </div>
-
-      {/* Tabela strank */}
-      <div className="overflow-x-auto rounded-xl shadow bg-brand-white mx-4">
-        <table className="min-w-full table-auto border-separate border-spacing-0">
-          <thead className="bg-brand-grayLight">
-            <tr>
-              <th className="p-3 text-left text-xs text-brand-blue uppercase tracking-widest">Ime / Podjetje</th>
-              <th className="p-3 text-left text-xs text-brand-blue uppercase tracking-widest">Tip</th>
-              <th className="p-3 text-left text-xs text-brand-blue uppercase tracking-widest">Email</th>
-              <th className="p-3 text-left text-xs text-brand-blue uppercase tracking-widest">Telefon</th>
-              <th className="p-3 text-left text-xs text-brand-blue uppercase tracking-widest">Naslov</th>
-              <th className="p-3 text-left text-xs text-brand-blue uppercase tracking-widest">Status</th>
-              <th className="p-3 text-left text-xs text-brand-blue uppercase tracking-widest">Datum vnosa</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map((c, i) => (
-              <tr key={c.id} className={`text-sm ${i % 2 === 0 ? 'bg-brand-grayLight/60' : 'bg-brand-white'} transition hover:bg-brand-blue/5`}>
-                <td className="p-3 font-semibold">
-                  {c.tip === 'podjetje' ? c.podjetje : c.ime}
-                  {c.tip === 'podjetje' && <span className="block text-xs text-gray-400">{c.ime}</span>}
-                  {c.davcna && <span className="block text-xs text-gray-600">{c.davcna}</span>}
-                </td>
-                <td className="p-3 capitalize">{c.tip}</td>
-                <td className="p-3">{c.email}</td>
-                <td className="p-3">{c.telefon}</td>
-                <td className="p-3">{c.naslov}</td>
-                <td className="p-3 capitalize">
-                  <span
-                    className={
-                      c.status === 'aktivno'
-                        ? 'bg-green-100 text-green-700 rounded-full px-2 py-1 text-xs font-semibold'
-                        : c.status === 'čakanje'
-                        ? 'bg-yellow-50 text-yellow-700 rounded-full px-2 py-1 text-xs font-semibold'
-                        : 'bg-red-100 text-red-700 rounded-full px-2 py-1 text-xs font-semibold'
-                    }
-                  >
-                    {c.status}
-                  </span>
-                </td>
-                <td className="p-3 text-xs">{c.datumVnosa.slice(0, 16).replace('T', ' ')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Modal/obrazec */}
-      {adding && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-8 shadow-2xl max-w-xl w-full relative">
-            <button
-              className="absolute top-4 right-4 text-brand-blue hover:text-brand-blueDark text-3xl"
-              onClick={() => setAdding(false)}
-            >
-              &times;
-            </button>
-            <h2 className="text-2xl font-extrabold text-brand-blue mb-4">Dodaj novo stranko</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Tip*</label>
-                <select
-                  name="tip"
-                  value={form.tip}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                >
-                  <option value="fizična">Fizična oseba</option>
-                  <option value="podjetje">Podjetje</option>
-                </select>
-                {errors.tip && <div className="text-red-600 text-xs mt-1">{errors.tip}</div>}
-              </div>
-
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Ime *</label>
-                <input
-                  name="ime"
-                  type="text"
-                  value={form.ime}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                />
-                {errors.ime && <div className="text-red-600 text-xs mt-1">{errors.ime}</div>}
-              </div>
-
-              {form.tip === 'podjetje' && (
-                <>
-                  <div>
-                    <label className="block font-bold text-brand-blue mb-1">Naziv podjetja *</label>
-                    <input
-                      name="podjetje"
-                      type="text"
-                      value={form.podjetje || ''}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                    />
-                    {errors.podjetje && <div className="text-red-600 text-xs mt-1">{errors.podjetje}</div>}
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-brand-blue mb-1">Davčna št. *</label>
-                    <input
-                      name="davcna"
-                      type="text"
-                      value={form.davcna || ''}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                    />
-                    {errors.davcna && <div className="text-red-600 text-xs mt-1">{errors.davcna}</div>}
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Email *</label>
-                <input
-                  name="email"
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                />
-                {errors.email && <div className="text-red-600 text-xs mt-1">{errors.email}</div>}
-              </div>
-
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Telefon *</label>
-                <input
-                  name="telefon"
-                  type="text"
-                  value={form.telefon}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                />
-                {errors.telefon && <div className="text-red-600 text-xs mt-1">{errors.telefon}</div>}
-              </div>
-
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Naslov *</label>
-                <input
-                  name="naslov"
-                  type="text"
-                  value={form.naslov}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                />
-                {errors.naslov && <div className="text-red-600 text-xs mt-1">{errors.naslov}</div>}
-              </div>
-
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Status *</label>
-                <select
-                  name="status"
-                  value={form.status}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                >
-                  <option value="aktivno">Aktivno</option>
-                  <option value="čakanje">Čakanje</option>
-                  <option value="zaprto">Zaprto</option>
-                </select>
-                {errors.status && <div className="text-red-600 text-xs mt-1">{errors.status}</div>}
-              </div>
-
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Opomba</label>
-                <textarea
-                  name="opomba"
-                  value={form.opomba || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-brand-blue mb-1">Datum vnosa</label>
-                <input
-                  name="datumVnosa"
-                  type="text"
-                  value={form.datumVnosa || new Date().toISOString()}
-                  readOnly
-                  className="w-full px-3 py-2 border border-brand-gray rounded focus:outline-none focus:border-brand-blue bg-gray-100"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="mt-6 w-full bg-brand-blue hover:bg-brand-blueDark text-brand-white font-bold py-2 rounded-lg shadow transition"
-              >
-                Shrani
-              </button>
-            </form>
-          </div>
+    <section className="space-y-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">CRM</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Upravljanje s strankami, projektni pregledi in zgodovina sodelovanj.
+          </p>
         </div>
-      )}
-    </div>
+        <button
+          type="button"
+          onClick={handleOpenModal}
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-accent px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand-accent/90"
+        >
+          <PlusCircleIcon className="h-5 w-5" /> Dodaj stranko
+        </button>
+      </header>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {stats.map((stat) => (
+          <div key={stat.label} className="rounded-xl bg-white p-5 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</p>
+            <p className="mt-3 text-2xl font-semibold text-brand-blue">{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Ime</th>
+                <th className="px-4 py-3">Podjetje</th>
+                <th className="px-4 py-3">Tip</th>
+                <th className="px-4 py-3">E-pošta</th>
+                <th className="px-4 py-3">Telefon</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Datum</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
+                    Nalagam podatke ...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-red-500">
+                    {error}
+                  </td>
+                </tr>
+              ) : clients.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
+                    Trenutno ni shranjenih strank.
+                  </td>
+                </tr>
+              ) : (
+                clients.map((client) => (
+                  <tr key={client.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium text-brand-blue">{client.name}</td>
+                    <td className="px-4 py-3">{client.company || '—'}</td>
+                    <td className="px-4 py-3 capitalize">{client.type}</td>
+                    <td className="px-4 py-3">{client.email}</td>
+                    <td className="px-4 py-3">{client.phone || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-brand-accent/10 px-2 py-1 text-xs font-semibold text-brand-accent">
+                        {client.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{client.createdAt}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Transition.Root show={isModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={setModalOpen}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-200"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-150"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/40" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 text-left shadow-xl">
+                  <Dialog.Title className="text-lg font-semibold text-brand-blue">
+                    Dodaj novo stranko
+                  </Dialog.Title>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Izpolni podatke stranke. Davčna številka je obvezna za podjetja.
+                  </p>
+
+                  {formError && (
+                    <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</div>
+                  )}
+
+                  <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Ime in priimek
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={form.name}
+                          onChange={(event) => handleChange('name', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Podjetje
+                        </label>
+                        <input
+                          type="text"
+                          value={form.company}
+                          onChange={(event) => handleChange('company', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Tip
+                        </label>
+                        <select
+                          value={form.type}
+                          onChange={(event) => handleChange('type', event.target.value as ClientType)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        >
+                          <option value="oseba">Fizična oseba</option>
+                          <option value="podjetje">Podjetje</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Davčna številka
+                        </label>
+                        <input
+                          type="text"
+                          value={form.taxNumber}
+                          onChange={(event) => handleChange('taxNumber', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                          placeholder={form.type === 'podjetje' ? 'Obvezno za podjetja' : 'Opcijsko'}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          E-pošta
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={form.email}
+                          onChange={(event) => handleChange('email', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Telefon
+                        </label>
+                        <input
+                          type="tel"
+                          value={form.phone}
+                          onChange={(event) => handleChange('phone', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Naslov
+                        </label>
+                        <input
+                          type="text"
+                          value={form.address}
+                          onChange={(event) => handleChange('address', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Status
+                        </label>
+                        <input
+                          type="text"
+                          value={form.status}
+                          onChange={(event) => handleChange('status', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Datum sodelovanja
+                        </label>
+                        <input
+                          type="date"
+                          value={form.createdAt}
+                          onChange={(event) => handleChange('createdAt', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Opombe
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={form.note}
+                          onChange={(event) => handleChange('note', event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={handleCloseModal}
+                        className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                      >
+                        Prekliči
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="inline-flex items-center rounded-lg bg-brand-accent px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand-accent/90 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {submitting ? 'Shranjujem ...' : 'Shrani stranko'}
+                      </button>
+                    </div>
+                  </form>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
+    </section>
   );
-}
+};
+
+export default CRM;

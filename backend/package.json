@@ -1,15 +1,23 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "description": "Express backend for Inteligent Dashboard demo",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "node index.js",
+    "seed": "node seed.js",
+    "health": "curl -s http://localhost:3000/health/db || exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "express": "^5.1.0"
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "mongoose": "^8.19.3",
+    "morgan": "^1.10.0",
+    "puppeteer": "^24.29.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
   }
 }
